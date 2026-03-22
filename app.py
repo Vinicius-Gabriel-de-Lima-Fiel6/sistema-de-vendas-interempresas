@@ -3,71 +3,52 @@ import pydeck as pdk
 import pandas as pd
 import numpy as np
 
-# Configuração da página SaaS
-st.set_page_config(page_title="SaaS B2B - Painel de Logística", layout="wide")
+st.set_page_config(layout="wide", page_title="SaaS B2B Map")
 
-st.title("Enterprise Sales Tracker - Uber Maps Control")
-st.sidebar.header("Filtros de Vendas B2B")
+# 1. Dados de Teste (Empresas e Vendas)
+data = pd.DataFrame({
+    'lat': np.random.uniform(-23.58, -23.52, 50),
+    'lon': np.random.uniform(-46.68, -46.62, 50),
+    'nome': [f"Empresa {i}" for i in range(50)],
+    'vendas': np.random.randint(5000, 100000, 50) # Valor que define a altura
+})
 
-# 1. Simulação de Dados de Vendas (Substitua pelo seu Banco de Dados/CSV depois)
-@st.cache_data
-def carregar_dados():
-    # Criando 100 pontos de vendas aleatórios em São Paulo
-    data = pd.DataFrame({
-        'latitude': np.random.uniform(-23.60, -23.50, 100),
-        'longitude': np.random.uniform(-46.70, -46.60, 100),
-        'valor_venda': np.random.randint(1000, 50000, 100),
-        'setor': np.random.choice(['Varejo', 'Indústria', 'Serviços'], 100)
-    })
-    return data
+# 2. Barra Lateral de Controle
+st.sidebar.header("Painel de Controle")
+altura_multiplicador = st.sidebar.slider("Aumentar Altura das Torres", 1, 100, 20)
+filtro_valor = st.sidebar.number_input("Ver vendas acima de (R$):", 0, 100000, 10000)
 
-df = carregar_dados()
+df_filtrado = data[data['vendas'] >= filtro_valor]
 
-# 2. Controles na Barra Lateral (Sidebar)
-setor_selecionado = st.sidebar.multiselect(
-    "Filtrar por Setor Econômico",
-    options=df['setor'].unique(),
-    default=df['setor'].unique()
+# 3. Camada de Colunas (Onde o controle acontece)
+layer = pdk.Layer(
+    "ColumnLayer",
+    df_filtrado,
+    get_position=['lon', 'lat'],
+    get_elevation='vendas',      # A altura vem da coluna 'vendas'
+    elevation_scale=altura_multiplicador, # O slider controla isso!
+    radius=100,                  # Largura da torre
+    get_fill_color=[18, 115, 222, 200], # Azul Uber
+    pickable=True,
+    extruded=True,               # Ativa o 3D
 )
 
-valor_minimo = st.sidebar.slider("Valor Mínimo da Transação (R$)", 0, 50000, 5000)
-
-# 3. Filtragem Lógica
-df_filtrado = df[
-    (df['setor'].isin(setor_selecionado)) & 
-    (df['valor_venda'] >= valor_minimo)
-]
-
-# 4. Configuração do Mapa Uber (Pydeck)
+# 4. Configuração da Câmera (Inclinada para ver o 3D)
 view_state = pdk.ViewState(
     latitude=-23.55,
     longitude=-46.65,
-    zoom=11,
-    pitch=50
+    zoom=12,
+    pitch=45, # Inclinação da câmera
+    bearing=30
 )
 
-# Camada de Hexágonos (estilo Uber) para ver densidade de vendas
-layer = pdk.Layer(
-    "HexagonLayer",
-    df_filtrado,
-    get_position=['longitude', 'latitude'],
-    radius=200,
-    elevation_scale=4,
-    elevation_range=[0, 1000],
-    pickable=True,
-    extruded=True,
-)
-
-# 5. Renderização no Streamlit
-st.write(f"Exibindo **{len(df_filtrado)}** transações filtradas.")
-
+# 5. Exibição
+st.title("Controle de Vendas por Região")
 st.pydeck_chart(pdk.Deck(
-    map_style='mapbox://styles/mapbox/light-v9', # Se ficar branco, mude para None ou 'light'
-    initial_view_state=view_state,
     layers=[layer],
-    tooltip={"text": "Setor: {setor}\nValor: R${valor_venda}"}
+    initial_view_state=view_state,
+    map_style='light',
+    tooltip={"text": "{nome}\nTotal: R${vendas}"}
 ))
 
-# Tabela de dados abaixo do mapa
-if st.checkbox("Mostrar tabela de dados bruta"):
-    st.dataframe(df_filtrado)
+st.write(f"Empresas exibidas: {len(df_filtrado)}")
